@@ -1,64 +1,60 @@
 <!DOCTYPE html>
 <html>
+
 <head>
     <meta charset="UTF-8">
-    <title>Org-Mode Editor with WebGL</title>
+    <title>Org-Mode Editor - Enhanced</title>
     <style>
-        body, html {
+        body,
+        html {
             margin: 0;
             overflow: hidden;
             height: 100%;
             background-color: #ffffff;
         }
+
         #glcanvas {
             width: 100%;
             height: 100%;
             display: block;
         }
+
         .hidden-input {
             position: absolute;
             opacity: 0;
             pointer-events: none;
         }
     </style>
-    <!-- Include glMatrix Library -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/gl-matrix/2.8.1/gl-matrix-min.js"></script>
 </head>
+
 <body>
     <canvas id="glcanvas"></canvas>
     <input type="text" class="hidden-input" autofocus />
     <script>
-        // Vertex shader program
-        const vsSource = `
-            attribute vec4 aVertexPosition;
-            attribute vec2 aTextureCoord;
-            varying highp vec2 vTextureCoord;
-            void main(void) {
-                gl_Position = aVertexPosition;
-                vTextureCoord = aTextureCoord;
-            }
-        `;
-
-        // Fragment shader program
-        const fsSource = `
-            varying highp vec2 vTextureCoord;
-            uniform sampler2D uSampler;
-            void main(void) {
-                gl_FragColor = texture2D(uSampler, vTextureCoord);
-            }
-        `;
-
-        // Initialize the WebGL context
+        // Get the canvas element and initialize 2D context
         const canvas = document.getElementById('glcanvas');
-        const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
-
-        if (!gl) {
-            alert('Unable to initialize WebGL. Your browser may not support it.');
-        }
+        const ctx = canvas.getContext('2d');
 
         // Initialize text content and cursor position
-        let textLines = ['* Heading 1', '** Subheading', 'Some text here', '- List item 1', '- List item 2'];
+        let textLines = [
+            '* Heading 1',
+            'Some content under heading 1.',
+            '** Subheading 1.1',
+            'Content under subheading 1.1.',
+            '* Heading 2',
+            'Content under heading 2.',
+            '- List item 1',
+            '- List item 2'
+        ];
         let cursorPosition = { line: 0, column: 0 };
+
+        // Visibility states
+        const VISIBILITY_STATES = {
+            GLOBAL_OVERVIEW: 0,
+            OUTLINE_VIEW: 1,
+            FULLY_EXPANDED: 2
+        };
+        let currentVisibilityState = VISIBILITY_STATES.FULLY_EXPANDED;
 
         // Hidden input to capture keyboard input
         const hiddenInput = document.querySelector('.hidden-input');
@@ -70,6 +66,15 @@
             hiddenInput.focus();
         });
         hiddenInput.focus();
+
+        // Resize the canvas to fit the window
+        function resizeCanvas() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            render();
+        }
+        window.addEventListener('resize', resizeCanvas);
+        resizeCanvas();
 
         function handleInput(event) {
             const inputChar = event.data;
@@ -101,7 +106,18 @@
                 case 'ArrowDown':
                     moveCursorDown();
                     break;
+                case 'Tab':
+                    if (event.shiftKey) {
+                        event.preventDefault();
+                        cycleVisibility();
+                    }
+                    break;
             }
+        }
+
+        function cycleVisibility() {
+            currentVisibilityState = (currentVisibilityState + 1) % 3;
+            render();
         }
 
         function insertCharacter(char) {
@@ -171,281 +187,95 @@
             }
         }
 
-        // Shader initialization
-        function initShaderProgram(gl, vsSource, fsSource) {
-            const vertexShader = loadShader(gl, gl.VERTEX_SHADER, vsSource);
-            const fragmentShader = loadShader(gl, gl.FRAGMENT_SHADER, fsSource);
-
-            // Create the shader program
-            const shaderProgram = gl.createProgram();
-            gl.attachShader(shaderProgram, vertexShader);
-            gl.attachShader(shaderProgram, fragmentShader);
-            gl.linkProgram(shaderProgram);
-
-            // If creating the shader program failed, alert
-            if (!gl.getProgramParameter(shaderProgram, gl.LINK_STATUS)) {
-                alert('Unable to initialize the shader program: ' + gl.getProgramInfoLog(shaderProgram));
-                return null;
-            }
-
-            return shaderProgram;
-        }
-
-        function loadShader(gl, type, source) {
-            const shader = gl.createShader(type);
-
-            // Send the source to the shader object
-            gl.shaderSource(shader, source);
-
-            // Compile the shader program
-            gl.compileShader(shader);
-
-            // See if it compiled successfully
-            if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
-                alert('An error occurred compiling the shaders: ' + gl.getShaderInfoLog(shader));
-                gl.deleteShader(shader);
-                return null;
-            }
-
-            return shader;
-        }
-
-        // Initialize the shader program
-        const shaderProgram = initShaderProgram(gl, vsSource, fsSource);
-
-        // Collect all the info needed to use the shader program.
-        const programInfo = {
-            program: shaderProgram,
-            attribLocations: {
-                vertexPosition: gl.getAttribLocation(shaderProgram, 'aVertexPosition'),
-                textureCoord: gl.getAttribLocation(shaderProgram, 'aTextureCoord'),
-            },
-            uniformLocations: {
-                uSampler: gl.getUniformLocation(shaderProgram, 'uSampler'),
-            },
-        };
-
-        // Simple color shader for drawing the cursor
-        const simpleColorVsSource = `
-            attribute vec4 aVertexPosition;
-            void main(void) {
-                gl_Position = aVertexPosition;
-            }
-        `;
-
-        const simpleColorFsSource = `
-            uniform lowp vec4 uColor;
-            void main(void) {
-                gl_FragColor = uColor;
-            }
-        `;
-
-        const simpleColorProgram = initShaderProgram(gl, simpleColorVsSource, simpleColorFsSource);
-        simpleColorProgram.attribLocations = {
-            vertexPosition: gl.getAttribLocation(simpleColorProgram, 'aVertexPosition'),
-        };
-        simpleColorProgram.uniformLocations = {
-            uColor: gl.getUniformLocation(simpleColorProgram, 'uColor'),
-        };
-
-        // Projection and model-view matrices
-        const projectionMatrix = mat4.create();
-        const modelViewMatrix = mat4.create();
-
-        // Function to create a texture from text
-        function createTextTexture(text, color = 'black') {
-            const canvas2d = document.createElement('canvas');
-            const ctx2d = canvas2d.getContext('2d');
-            ctx2d.font = '16px monospace';
-            const metrics = ctx2d.measureText(text);
-            canvas2d.width = metrics.width;
-            canvas2d.height = 20; // Approximate line height
-            ctx2d.font = '16px monospace';
-            ctx2d.fillStyle = color;
-            ctx2d.textBaseline = 'top';
-            ctx2d.fillText(text, 0, 0);
-
-            const texture = gl.createTexture();
-            gl.bindTexture(gl.TEXTURE_2D, texture);
-
-            // Flip the image's Y axis to match WebGL's texture coordinate space
-            gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
-
-            // Upload the image into the texture
-            gl.texImage2D(
-                gl.TEXTURE_2D,
-                0,
-                gl.RGBA,
-                gl.RGBA,
-                gl.UNSIGNED_BYTE,
-                canvas2d
-            );
-
-            // Set the parameters so we can render any size image
-            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-
-            return {
-                texture: texture,
-                width: canvas2d.width,
-                height: canvas2d.height,
-            };
-        }
-
-        // Function to draw a texture at a given position
-        function drawTexture(textureInfo, x, y) {
-            const positions = [
-                (x / canvas.width) * 2 - 1, 1 - (y / canvas.height) * 2,
-                ((x + textureInfo.width) / canvas.width) * 2 - 1, 1 - (y / canvas.height) * 2,
-                (x / canvas.width) * 2 - 1, 1 - ((y + textureInfo.height) / canvas.height) * 2,
-                ((x + textureInfo.width) / canvas.width) * 2 - 1, 1 - ((y + textureInfo.height) / canvas.height) * 2,
-            ];
-            const positionBuffer = gl.createBuffer();
-            gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
-            gl.bufferData(
-                gl.ARRAY_BUFFER,
-                new Float32Array(positions),
-                gl.STATIC_DRAW
-            );
-
-            const textureCoordinates = [
-                0.0, 0.0,
-                1.0, 0.0,
-                0.0, 1.0,
-                1.0, 1.0,
-            ];
-            const textureCoordBuffer = gl.createBuffer();
-            gl.bindBuffer(gl.ARRAY_BUFFER, textureCoordBuffer);
-            gl.bufferData(
-                gl.ARRAY_BUFFER,
-                new Float32Array(textureCoordinates),
-                gl.STATIC_DRAW
-            );
-
-            // Tell WebGL how to pull out the positions from the position buffer into the vertexPosition attribute
-            gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
-            gl.vertexAttribPointer(
-                programInfo.attribLocations.vertexPosition,
-                2, // numComponents
-                gl.FLOAT, // type
-                false, // normalize
-                0, // stride
-                0 // offset
-            );
-            gl.enableVertexAttribArray(programInfo.attribLocations.vertexPosition);
-
-            // Tell WebGL how to pull out the texture coordinates from the buffer
-            gl.bindBuffer(gl.ARRAY_BUFFER, textureCoordBuffer);
-            gl.vertexAttribPointer(
-                programInfo.attribLocations.textureCoord,
-                2, // numComponents
-                gl.FLOAT, // type
-                false, // normalize
-                0, // stride
-                0 // offset
-            );
-            gl.enableVertexAttribArray(programInfo.attribLocations.textureCoord);
-
-            // Tell WebGL to use our shader program
-            gl.useProgram(programInfo.program);
-
-            // Set the shader uniforms
-            gl.activeTexture(gl.TEXTURE0);
-            gl.bindTexture(gl.TEXTURE_2D, textureInfo.texture);
-            gl.uniform1i(programInfo.uniformLocations.uSampler, 0);
-
-            // Draw the rectangle
-            gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
-        }
-
         function render() {
             // Clear the canvas
-            gl.clearColor(1.0, 1.0, 1.0, 1.0);
-            gl.clear(gl.COLOR_BUFFER_BIT);
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-            // Initialize variables for positioning
+            ctx.font = '16px monospace';
+            ctx.textBaseline = 'top';
+
             const lineHeight = 20;
-            let yPosition = 0;
+
+            // Calculate initial yPosition and xPosition to center the text horizontally and vertically
+            let yPosition = canvas.height / 4;  // Start rendering text a quarter way down the screen
+            const xPosition = canvas.width / 4; // Start rendering text a quarter way across the screen
+
+            // Track the current headline levels
+            let headlineStack = [];
 
             for (let i = 0; i < textLines.length; i++) {
                 let line = textLines[i];
-                let color = 'black';
+                let isVisible = false;
 
-                // Simple Org-mode syntax highlighting
-                if (/^\*+ /.test(line)) {
-                    color = 'blue';
-                } else if (/^- /.test(line)) {
-                    color = 'green';
+                // Determine visibility based on the current visibility state
+                switch (currentVisibilityState) {
+                    case VISIBILITY_STATES.GLOBAL_OVERVIEW:
+                        // Only show top-level headlines
+                        if (/^\* /.test(line)) {
+                            isVisible = true;
+                        }
+                        break;
+                    case VISIBILITY_STATES.OUTLINE_VIEW:
+                        // Show all headlines
+                        if (/^\*+ /.test(line)) {
+                            isVisible = true;
+                        }
+                        break;
+                    case VISIBILITY_STATES.FULLY_EXPANDED:
+                        // Show everything
+                        isVisible = true;
+                        break;
                 }
 
-                // Create texture from text
-                const textureInfo = createTextTexture(line, color);
-
-                // Draw the text texture
-                drawTexture(textureInfo, 10, yPosition);
-
-                // Draw cursor
-                if (i === cursorPosition.line) {
-                    const textBeforeCursor = line.slice(0, cursorPosition.column);
-                    const cursorTextInfo = createTextTexture(textBeforeCursor);
-                    const cursorX = 10 + cursorTextInfo.width;
-                    const cursorHeight = lineHeight;
-
-                    // Draw cursor rectangle
-                    const cursorPositions = [
-                        (cursorX / canvas.width) * 2 - 1, 1 - (yPosition / canvas.height) * 2,
-                        ((cursorX + 2) / canvas.width) * 2 - 1, 1 - (yPosition / canvas.height) * 2,
-                        (cursorX / canvas.width) * 2 - 1, 1 - ((yPosition + cursorHeight) / canvas.height) * 2,
-                        ((cursorX + 2) / canvas.width) * 2 - 1, 1 - ((yPosition + cursorHeight) / canvas.height) * 2,
-                    ];
-                    const cursorPositionBuffer = gl.createBuffer();
-                    gl.bindBuffer(gl.ARRAY_BUFFER, cursorPositionBuffer);
-                    gl.bufferData(
-                        gl.ARRAY_BUFFER,
-                        new Float32Array(cursorPositions),
-                        gl.STATIC_DRAW
-                    );
-
-                    // Disable texture coordinates for the cursor
-                    gl.disableVertexAttribArray(programInfo.attribLocations.textureCoord);
-
-                    // Set up the cursor position attribute
-                    gl.bindBuffer(gl.ARRAY_BUFFER, cursorPositionBuffer);
-                    gl.vertexAttribPointer(
-                        simpleColorProgram.attribLocations.vertexPosition,
-                        2,
-                        gl.FLOAT,
-                        false,
-                        0,
-                        0
-                    );
-                    gl.enableVertexAttribArray(simpleColorProgram.attribLocations.vertexPosition);
-
-                    // Use the simple color shader
-                    gl.useProgram(simpleColorProgram);
-                    gl.uniform4f(simpleColorProgram.uniformLocations.uColor, 0.0, 0.0, 0.0, 1.0);
-
-                    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
-
-                    // Re-enable texture coordinates for text rendering
-                    gl.enableVertexAttribArray(programInfo.attribLocations.textureCoord);
+                // Adjust visibility for content under collapsed headlines
+                if (currentVisibilityState !== VISIBILITY_STATES.FULLY_EXPANDED) {
+                    // Update headline stack
+                    if (/^\*+ /.test(line)) {
+                        const stars = line.match(/^\*+/)[0];
+                        const level = stars.length;
+                        headlineStack = headlineStack.slice(0, level - 1);
+                        headlineStack.push({ level, isVisible });
+                    } else if (headlineStack.length > 0) {
+                        // Inherit visibility from the latest headline
+                        isVisible = headlineStack[headlineStack.length - 1].isVisible;
+                    } else {
+                        // Content before any headline is visible only in fully expanded mode
+                        isVisible = currentVisibilityState === VISIBILITY_STATES.FULLY_EXPANDED;
+                    }
                 }
 
-                yPosition += lineHeight;
+                if (isVisible) {
+                    // Simple Org-mode syntax highlighting
+                    if (/^\*+ /.test(line)) {
+                        const stars = line.match(/^\*+/)[0];
+                        const content = line.slice(stars.length + 1);
+                        ctx.fillStyle = 'blue';
+                        ctx.fillText(stars, xPosition, yPosition); // Adjust x and y positions
+                        ctx.fillStyle = 'black';
+                        ctx.fillText(content, xPosition + ctx.measureText(stars + ' ').width, yPosition);
+                    } else if (/^- /.test(line)) {
+                        ctx.fillStyle = 'green';
+                        ctx.fillText(line, xPosition, yPosition); // Adjust x and y positions
+                    } else {
+                        ctx.fillStyle = 'black';
+                        ctx.fillText(line, xPosition, yPosition); // Adjust x and y positions
+                    }
+
+                    // Draw cursor
+                    if (i === cursorPosition.line) {
+                        const textBeforeCursor = line.slice(0, cursorPosition.column);
+                        const cursorX = xPosition + ctx.measureText(textBeforeCursor).width;
+                        ctx.fillRect(cursorX, yPosition, 2, lineHeight);
+                    }
+
+                    yPosition += lineHeight;
+                }
             }
         }
 
-        // Resize the canvas to fit the window
-        function resizeCanvas() {
-            canvas.width = window.innerWidth;
-            canvas.height = window.innerHeight;
-            gl.viewport(0, 0, gl.drawingBufferWidth, gl.drawingBufferHeight);
-            render();
-        }
-
-        window.addEventListener('resize', resizeCanvas);
-        resizeCanvas();
+        // Initial render
+        render();
     </script>
 </body>
+
 </html>
