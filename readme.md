@@ -19,7 +19,7 @@ A fast, web-based emulator of Emacs Org-mode using WebGL.
 
 **WebOrg** is a single HTML file that simulates a basic Emacs Org-mode text editing experience using WebGL. It serves as a simple note-taking and editing tool with basic Org-mode syntax highlighting. The editor supports headings and list items, and you can interact with it using your keyboard.
 
-## Features
+## Features .
 
 - **WebGL Rendering:** Utilizes WebGL for canvas initialization and clearing, while text rendering is handled via the 2D context for simplicity.
 - **Basic Org-Mode Syntax Highlighting:**
@@ -30,7 +30,7 @@ A fast, web-based emulator of Emacs Org-mode using WebGL.
 
 ## Screenshot
 
-![WebOrg Screenshot](screenshot.png)
+![WebOrg Screenshot](image.jpg)
 
 *Note: Replace `screenshot.png` with the actual path to your screenshot image.*
 
